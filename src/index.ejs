@@ -18,38 +18,160 @@
   </d-front-matter>
 
   <d-title>
-    <h1>Distill Example</h1>
-    <p>An example project using Webpack, Babel, and Svelte. </p>
+    <h1>Constraint policy optimization </h1>
+    <p>An example project usingWebpack, Babel, and Svelte. </p>
   </d-title>
 
   <d-article>
-
+    <h3>Introduction</h3>
     <p>
-      Welcome to a Distill example article: meant to get you writing up your research quickly. Let's demo some
-      features:
+      Welcome to our paper about the constraint policy opmization (CPO).
+      In this article, we will discuss the CPO method for safe reinforcement learning, 
+      which was presented in the paper "Contraint Policy Optimization" by 
+      Joshua Achiam, David Held, Aviv Tamar, and Pieter Abbel in 2017 (We abbreviate it to be [CPO17]). 
+      In their paper, the underlying theoretical solution to the constraint problem 
+      was presented, and what we are going to show you in this article is our implementation of the algorithm
+      using PyTorch. During the implementation of the CPO method, we came up to the idea of implementing the CG-method to
+      increase the efficiency of the algorithm. To be sure of that, we made some experiments with different CG iterations
+      (which we will clarify) and acquired some interesting results. Additionally, in the early stage of the implementation,
+      we ran into a problem, in which the reward function oscillated up and down during the entire training of the agents. 
+      By carefully analyzing the problem, we found out about the reason and will present you with the solution.
+
     </p>
 
-    <h4>Hot reloading</h4>
-    <p>Your browser can automatically refresh when your editor saves. This should work by default, and you can disable
-      it in <code>index.js</code>. Sometimes hot reloading isn't fully compatible with all types of code, so you may
-      need to try manually reloading if you're seeing inconsistent behavior.</p>
+    <br>
+    
 
-    <h4>Inlined SVGs</h4>
-    <p>SVGs are so small that it can be nice to save an extra request and simply inline them intop your HTML:</p>
+    <h3>Table of contents</h3>
+    <p>
 
-    <figure>
-      <%= require("../static/diagrams/diffparam.svg") %>
-    </figure>
+      <ol>
+        <li>Introducing the algorithm</li>
+          <ol>
+            <li>Abstract theory</li>
+            <li>Solution</li>
+          </ol>
+        <li>Showcase</li>
+        <ol>
+          <li>CartPole</li>
+          <li>LunarLander</li>
+        </ol>
+        <li>Experiments:</li>
+        <ol>
+          <li>CG-method</li>
+          <li>Trust region step</li>
+        </ol>
+      </ol> 
 
-    <style>
-      #arrow-2 #arrow-head {
-        fill: steelblue;
-      }
+    <h3>Introducing the algorithm</h3>
+    <p>
+      Since the full abstract theory behind CPO was fully cover in [CPO17], we recall only the main theoretical results 
+      that we would implement into our code to computationally solve the problem. 
+    </p>
+    <h4>Abstract theory</h4>
+    <p>
+      First, we start by introducing our main optimization problem of the reward function: 
+      Let $\Pi_\theta \subset \Pi$ be the set of parametrized policies under parameter $\theta$, 
+      on which we want to conduct our policy search algorithm to avoid the curse of dimensionality.
+      We optimize over $\Pi_\theta \bigcap \Pi_C$. For $\delta > 0$ step size, $D$ as a distance measure we have
+    </p>
+    <d-math block="">
+      \pi_{k+1} = \arg \max_{\pi \in \Pi_\theta} J(\pi),
+    </d-math>
+    <d-math block="">
+      J_{C_i}(\pi) \leq d_i, \quad i = 1,.. m
+    </d-math>
+    <d-math block="">
+      D(\pi,\pi_k) \leq \delta
+    </d-math>
+  <p>
+    By applying the trust region methods with suitable coefficients instead of penalties on policy divergence, 
+    we can guarantee a monotonic improvement while being able to take large steps.
+  </p>
 
-      #arrow-2 #arrow-line {
-        stroke: steelblue;
-      }
-    </style>
+  <d-math block="">
+  \pi_{k+1} = \arg \max_{\pi \in \Pi_\theta}\mathbb{E}_{s \sim d^{\pi^k}} \left[A^{\pi}_R(s, a)\right]
+  </d-math>
+  with constraints:
+  <d-math block="">
+  J_{C_i}(\pi_k) +  \frac{1}{1-\tau}\mathbb{E}_{s \sim d^{\pi^k}} \left[A^{\pi}_R(s, a) \right] \leq d_i
+  </d-math>
+  <d-math block="">
+  \mathbb{E}_{s \sim d^{\pi^k}}[D_{KL}(\pi||\pi_k)[s]] \leq \delta,
+  </d-math>
+  This optimization problem of the reward function paired with a trust region is the main goal to solve. 
+  <br>
+
+  Also, the "suitable coefficients" part is actually interesting since it is the root of the problem that we mentioned earlier in 
+  the introductory part of this article. We will explain this in the following section. 
+
+  <h4>Dual problem</h4>
+  <p>In order to solve the above mentioned optimization problem, 
+    we have to present it in different format so that it could be solved using computational method.
+    Now we turn to parametrized policies $\pi_\theta$ and linearized it using the surrogate function. </p>
+
+    <p>
+    We denote: $g := \nabla J(\theta_k)^\top $ as gradient of the objective, 
+    $b_i := J_{C_i}(\theta_k)$ as gradient of the constraint,
+    $c_i :=  J_{C_i}(\theta_k)^\top (\theta - \theta_k)$
+    </p>
+
+    <d-math block =""> \theta_{k+1} = \arg\max_\theta g(\theta - \theta_k) \text{s.t. }</d-math>
+    <d-math block =""> J_{C_i}(\theta_k) +  \le d_i \text{ for } i=1,...,m</d-math>
+    <d-math block =""> \frac{1}{2} (\theta - \theta_k)^\top H (\theta - \theta_k) \le \delta </d-math>
+    <p> Where $H$ denotes the Hessian of the KL-divergence, we assume it to be positive definite.</p>
+    <br>
+    <p> To solve this optimization with consideration of constraints problem, we first present the 
+      dual to the problem which is
+    </p>
+
+    <d-math block =""> 
+      \max_{\lambda \geq 0, \nu \geq 0} \frac{-1}{2\lambda} (g^\top H^{-1}g - 2r^T \nu + \nu^{\top}S\nu) + \nu^\top c \frac{\lambda \delta}{2}
+    </d-math>
+    <p>
+      Whereas
+      <br>
+      $B := [b_1, b_2,...]^\top, \quad$ $c :=  [c_1, c_2,...]^\top, \quad $ 
+      $r := g^\top H^{-1} B, \quad $ $S := B^\top H^{-1} B$
+      </p>
+
+      <h4>Solution to the dual problem</h4>
+      Solve for $\lambda^*$ and $\nu^*$ using Lagrangian method for one constraint,
+       we achieve the solution of the dual problem when it is FEASIBLE:
+
+    <d-math block =""> \theta^* = \theta_k + \frac{1}{\lambda^*}H^{-1}(g - B\nu^*) </d-math>
+      Whereas $\nu^* = (\frac{\lambda^*c-r}{S})_+$ and <br>
+      $\lambda^* =$
+
+      <br>
+      When it is however, infeasible, we use the following update rule:
+
+    <d-math block =""> \theta^* = \theta_k - \sqrt{\frac{2\delta}{b^\top H^{-1}b}}H^{-1}b</d-math>
+<br>
+<p> 
+      Before we showcase the results, it is clear that the algorithm might require great computational power, 
+      since we deal a lot with the inverse matrix problem ($H^{-1}b$). 
+      In order to improve the efficiency of the algorithm, we will apply the CG-method to solve the inverse matrix problem.
+      <br>
+      Furthermore, the trust region coefficients do play an important role in our algorithm, since it would affect how 
+      great our backtrack step is going to be in case of infeasibility.
+    </p>
+      <br>
+      <br>
+      <br>
+      ###########
+      <br>
+
+
+      <h3>Showcase</h3>
+
+      <br>
+ 
+      ###########
+      <br>
+
+
+
 
     <p>Let's use some CSS to style an inlined SVG. Here's an arrow
       <svg width="27px" height="9px" viewBox="0 0 27 9" version="1.1" xmlns="http://www.w3.org/2000/svg"
