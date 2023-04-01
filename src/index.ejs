@@ -17,7 +17,6 @@
     </script>
   </d-front-matter>
 
-  <d-article>
   <d-title>
     <h1>Safe action repetition for Policy Gradient methods</h1>
   </d-title>
@@ -55,7 +54,7 @@
     <p>
       In SAR, the policy (an Actor-Critic Policy) produces both an action and a safe region. To achieve this, a third neural network (NN) is introduced alongside
       the classic NNs of PG (action network, log-standard-deviation network) to produce the safe region. The NNs are created in
-      the policy class' <d-code>_build</d-code> method
+      the policy class' <d-code language="python">_build</d-code> method
     </p>
 
     <d-code block="" language="python">
@@ -72,7 +71,7 @@
     </d-code>
 
     <p>
-      <d-code>MixedDistribution</d-code> is a class that takes as an argument to its constructor any SB3 distribution class and adds to it
+      <d-code language="python">MixedDistribution</d-code> is a class that takes as an argument to its constructor any SB3 distribution class and adds to it
       a Categorical distribution that produces the safe region:
     </p>
     <d-code block="" language="python">
@@ -155,11 +154,11 @@
 
           return obs, total_reward, done, info
     </d-code>
+  </d-article>
 
-
+  <d-appendix>
     <d-citation-list></d-citation-list>
   </d-appendix>
-
   <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
   <d-bibliography src="bibliography.bib"></d-bibliography>
 
