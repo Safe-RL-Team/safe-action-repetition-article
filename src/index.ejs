@@ -35,10 +35,10 @@
     <h4>Approach</h4>
     <p>
       Previous works have used the framework of <i>durative actions</i>, which in a discretized setting are equivalent to
-      <i>action repetition</i>. To achieve this, a policy is chosen to produce an action along with a number of repetitions. 
+      <i>action repetition</i>. To achieve this, a policy is chosen to produce an action along with a number of repetitions <d-cite key="figar"></d-cite>. 
       This does not allow the algoritm to stop the repetition of an action, which means the agent cannot accommodate for 
       unexpected events, an ability crucial for robotics. To solve this, this work presents the apporach of <i>Safe Action
-      Repetition</i> (SAR), in which the policy produces an action and a safe region. The agent will repeat the action until it
+      Repetition</i> (SAR) <d-cite key="sar"></d-cite>, in which the policy produces an action and a safe region. The agent will repeat the action until it
       leaves the safe region. SAR allows policy gradient (PG) to both be invariant to the choice of $\delta$ and perform well
       in stochastic environments.
     </p>
