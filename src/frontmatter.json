@@ -1,12 +1,11 @@
 {
-	"title": "Distill Example",
-	"description": "An example project using Webpack, Babel, and Svelte.",
+	"title": "Safe Action Repetition",
+	"description": "A time-discretization invatiant Policy Gradient algorithm",
 	"authors": [
 		{
-			"author": "Ludwig Schubert",
-			"authorURL": "https://schubert.io/",
-			"affiliation": "OpenAI",
-			"affiliationURL": "https://openai.com"
+			"author": "Hristo Boyadzhiev",
+			"affiliation": "Technical University of Berlin",
+			"affiliationURL": "https://tu.berlin"
 		}
 	],
 	"katex": {
