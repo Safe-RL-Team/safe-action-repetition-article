@@ -1,0 +1,231 @@
+<!doctype html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style id="distill-article-specific-styles">
+    .subgrid {
+  grid-column: screen; 
+  display: grid; 
+  grid-template-columns: inherit;
+  grid-template-rows: inherit;
+  grid-column-gap: inherit;
+  grid-row-gap: inherit;
+}
+
+d-figure.base-grid {
+  grid-column: screen;
+  background: hsl(0, 0%, 97%);
+  padding: 20px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+d-figure {
+  margin-bottom: 1em;
+  position: relative;
+}
+
+d-figure > figure {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.shaded-figure {
+  background-color: hsl(0, 0%, 97%);
+  border-top: 1px solid hsla(0, 0%, 0%, 0.1);
+  border-bottom: 1px solid hsla(0, 0%, 0%, 0.1);
+  padding: 30px 0;
+}
+
+.pointer {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  top: 26px;
+  left: -48px;
+}
+
+  </style>
+  <script src="https://distill.pub/template.v2.js"></script>
+</head>
+
+<body>
+
+  <d-front-matter>
+    <script type="text/json">
+      {
+    "title": "Safe Action Repetition",
+    "description": "A time-discretization invatiant Policy Gradient algorithm",
+    "authors": [
+        {
+            "author": "Hristo Boyadzhiev",
+            "affiliation": "Technical University of Berlin",
+            "affiliationURL": "https://tu.berlin"
+        }
+    ],
+    "katex": {
+        "delimiters": [
+            {
+                "left": "$",
+                "right": "$",
+                "display": false
+            },
+            {
+                "left": "$$",
+                "right": "$$",
+                "display": true
+            }
+        ]
+    }
+}
+    </script>
+  </d-front-matter>
+
+  <d-article>
+  <d-title>
+    <h1>Safe action repetition for Policy Gradient methods</h1>
+  </d-title>
+
+  <d-article>
+    
+    <h4>Introduction</h4>
+    <p>
+      Many reinforcement learning (RL) problems, such as any robotics task, are defined in a continuous setting. This does not
+      fit the Markov Decision Process (MDP) framework, which is the basis of most RL algorithms. To 
+      solve this, continuous time is discretized by a <i>discretization time scale</i> $\delta$. RL algorithms' performance has
+      been shown to be highly sensitive to the choice of this parameter. This work presents an algorithm that performs well  
+      regardless of the choice of $\delta$.
+    </p>
+
+    <h4>Approach</h4>
+    <p>
+      Previous works have used the framework of <i>durative actions</i>, which in a discretized setting are equivalent to
+      <i>action repetition</i>. To achieve this, a policy is chosen to produce an action along with a number of repetitions. 
+      This does not allow the algoritm to stop the repetition of an action, which means the agent cannot accommodate for 
+      unexpected events, an ability crucial for robotics. To solve this, this work presents the apporach of <i>Safe Action
+      Repetition</i> (SAR), in which the policy produces an action and a safe region. The agent will repeat the action until it
+      leaves the safe region. SAR allows policy gradient (PG) to both be invariant to the choice of $\delta$ and perform well
+      in stochastic environments.
+    </p>
+
+    <h4>implementation</h4>
+    <p>
+      The algorithm is implemented on top of the Stable Baselines 3 (SB3) library, and tested on OpenAI's Gym environments. 
+      SB3 provides an implementation of Proximal Policy Optimization (PPO). This section will explore the main ways SB3's implementation
+      was modified to implement SAR.
+    </p>
+
+    <h5>Policy</h5>
+    <p>
+      In SAR, the policy (an Actor-Critic Policy) produces both an action and a safe region. To achieve this, a third neural network (NN) is introduced alongside
+      the classic NNs of PG (action network, log-standard-deviation network) to produce the safe region. The NNs are created in
+      the policy class' <d-code>_build</d-code> method
+    </p>
+
+    <d-code block="" language="python">
+      def _build(self, lr_schedule: Schedule):
+          ...
+          if isinstance(self.action_dist, DiagGaussianDistribution):
+              self.action_net, self.log_std_net = self.action_dist.proba_distribution_net(...)
+          ...
+          elif isinstance(self.action_dist, MixedDistribution):
+              self.action_net, self.log_std_net, self.dist_action_net = self.action_dist.proba_distribution_net(
+                  latent_dim=latent_dim_pi, log_std_init=self.log_std_init
+              )
+          ...
+    </d-code>
+
+    <p>
+      <d-code>MixedDistribution</d-code> is a class that takes as an argument to its constructor any SB3 distribution class and adds to it
+      a Categorical distribution that produces the safe region:
+    </p>
+    <d-code block="" language="python">
+      class MixedDistribution(Distribution):
+          def __init__(self, cont_cls, cont_kwargs, action_space):
+              super().__init__()
+              self.cont_dist = cont_cls(get_action_dim(action_space.spaces[0]), **cont_kwargs)
+              self.dis_dist = CategoricalDistribution(action_space.spaces[1].n)
+      
+          def proba_distribution_net(self, latent_dim: int, log_std_init):
+              action_net, log_std_net = self.cont_dist.proba_distribution_net(latent_dim, log_std_init)
+              dist_action_net = self.dis_dist.proba_distribution_net(latent_dim)
+              return action_net, log_std_net, dist_action_net
+        ...
+    </d-code>
+
+    <h5>Action repetition</h5>
+    <p>
+      The actual repetition of actions, as well as the application of stochasticity, is done as part of the step function in a gym environment wrapper class.
+    </p>
+
+    <d-code block="" language="python">
+      def step(self, aug_action):
+          cur_idx = self.ori_action_dim
+          action = aug_action[:self.ori_action_dim]
+
+          # application of stochasticity
+          if self.anoise_type == 'action': # "action noise"
+              if np.random.rand() < self.anoise_prob:
+                  action = action + np.random.randn(*action.shape) * self.anoise_std
+                  action = np.clip(action, self.action_space.low[:len(action)], self.action_space.high[:len(action)])
+          elif self.anoise_type is not None and 'ext' in self.anoise_type: # "external force"
+              if np.random.rand() < self.anoise_prob:
+                  force = np.random.randn(3) * self.anoise_std
+                  torque = np.zeros(3)
+                  cur_info = force
+
+              # apply force
+              self.env.sim.data.xfrc_applied[self.env.sim.model._body_name2id[self.body_key], :] = [0] * 6
+
+          u = aug_action[cur_idx]
+          cur_idx += 1
+          norm_u = (u + 1) / 2
+          u = norm_u
+
+          total_reward = 0.0
+          done = None
+          cur_gamma = 1.0
+          first_obs = self.cur_obs
+          for i in range(100000000): # repeat action forever
+              obs, reward, done, info = self.env.step(action)
+
+              if self.anoise_type in ['ext_fpc']:
+                  obs = np.concatenate([obs, self.cur_force])
+
+              if not done:
+                  self._update_obs_estimate(obs[np.newaxis, ...])
+                  self.reset_update_obs_estimate = True
+              total_reward += reward * cur_gamma
+              cur_gamma *= self.gamma
+              if done:
+                  break
+
+              if self.max_d is None:
+                  break
+
+              norm_obs = (obs - self.obs_rms.mean) / (np.sqrt(self.obs_rms.var) + self.epsilon_std)
+              norm_first_obs = (first_obs - self.obs_rms.mean) / (np.sqrt(self.obs_rms.var) + self.epsilon_std)
+
+              # Distance computation
+              d_delta = np.linalg.norm(norm_obs - norm_first_obs, ord=1) / len(obs)
+
+              # stop repetition check
+              if d_delta >= u * self.max_d:
+                  break
+
+          ...
+
+          self.num_steps += 1
+
+          return obs, total_reward, done, info
+    </d-code>
+
+
+    <d-citation-list></d-citation-list>
+  </d-appendix>
+
+  <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
+  <d-bibliography src="bibliography.bib"></d-bibliography>
+
+<script type="text/javascript" src="index.bundle.js"></script></body>
