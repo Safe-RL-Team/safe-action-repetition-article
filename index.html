@@ -82,7 +82,6 @@ d-figure > figure {
     </script>
   </d-front-matter>
 
-  <d-article>
   <d-title>
     <h1>Safe action repetition for Policy Gradient methods</h1>
   </d-title>
@@ -101,10 +100,10 @@ d-figure > figure {
     <h4>Approach</h4>
     <p>
       Previous works have used the framework of <i>durative actions</i>, which in a discretized setting are equivalent to
-      <i>action repetition</i>. To achieve this, a policy is chosen to produce an action along with a number of repetitions. 
+      <i>action repetition</i>. To achieve this, a policy is chosen to produce an action along with a number of repetitions <d-cite key="figar"></d-cite>. 
       This does not allow the algoritm to stop the repetition of an action, which means the agent cannot accommodate for 
       unexpected events, an ability crucial for robotics. To solve this, this work presents the apporach of <i>Safe Action
-      Repetition</i> (SAR), in which the policy produces an action and a safe region. The agent will repeat the action until it
+      Repetition</i> (SAR) <d-cite key="sar"></d-cite>, in which the policy produces an action and a safe region. The agent will repeat the action until it
       leaves the safe region. SAR allows policy gradient (PG) to both be invariant to the choice of $\delta$ and perform well
       in stochastic environments.
     </p>
@@ -120,7 +119,7 @@ d-figure > figure {
     <p>
       In SAR, the policy (an Actor-Critic Policy) produces both an action and a safe region. To achieve this, a third neural network (NN) is introduced alongside
       the classic NNs of PG (action network, log-standard-deviation network) to produce the safe region. The NNs are created in
-      the policy class' <d-code>_build</d-code> method
+      the policy class' <d-code language="python">_build</d-code> method
     </p>
 
     <d-code block="" language="python">
@@ -137,7 +136,7 @@ d-figure > figure {
     </d-code>
 
     <p>
-      <d-code>MixedDistribution</d-code> is a class that takes as an argument to its constructor any SB3 distribution class and adds to it
+      <d-code language="python">MixedDistribution</d-code> is a class that takes as an argument to its constructor any SB3 distribution class and adds to it
       a Categorical distribution that produces the safe region:
     </p>
     <d-code block="" language="python">
@@ -220,11 +219,11 @@ d-figure > figure {
 
           return obs, total_reward, done, info
     </d-code>
+  </d-article>
 
-
+  <d-appendix>
     <d-citation-list></d-citation-list>
   </d-appendix>
-
   <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
   <d-bibliography src="bibliography.bib"></d-bibliography>
 
